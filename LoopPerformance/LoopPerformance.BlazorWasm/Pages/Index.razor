@@ -1,8 +1,7 @@
 ﻿@page "/"
+@inject IWorkerFactory workerFactory
 
-<h1>Hello, world!</h1>
-
-Welcome to your new app.
+<h1>Run on UI Thread</h1>
 
 <div style="display: flex; flex-direction: row; width: 100%; justify-content: space-between">
     @for (int i = 1; i <= 3; i++)
@@ -14,12 +13,51 @@ Welcome to your new app.
         </div>
     }
 </div>
+<br>
+<h1>Run on Web Worker Thread</h1>
+<div style="display: flex; flex-direction: row; width: 100%; justify-content: space-between">
+    @for (int i = 1; i <= 3; i++)
+    {
+        var sampleCount = i * 10000;
+        <div style="display: flex; flex-direction: column; width: 33.33%; align-items: center">
+            <h3>Start with @(sampleCount) sample</h3>
+            <button class="btn btn-primary" @onclick="() => OnClick(sampleCount)">Click me</button>
+        </div>
+    }
+</div>
+<div>
+    <h1>Result</h1>
+    <p>@(!result ? "Running ..." : "Finished")</p>
+</div>
 
 @code {
+    private bool result = true;
+
     private int currentCount = 0;
 
-    private void IncrementCount(int sampleCount)
+    private async Task IncrementCount(int sampleCount)
     {
+        this.result = false;
+        //StateHasChanged();
+        await Task.Delay(10);
+
         Helpers.SampleRun(sampleCount);
+
+        this.result = true;
+    }
+
+    private async Task OnClick(int sampleCount)
+    {
+        this.result = false;
+
+        IWorker worker = await workerFactory.CreateAsync();
+
+        IWorkerBackgroundService<LongRunningService> backgroundService = await worker.CreateBackgroundServiceAsync<LongRunningService>(
+            options => options
+            .AddConventionalAssemblyOfService()
+            .AddAssemblies($"{nameof(LoopPerformanceLib)}.dll")
+            );
+
+        this.result = await backgroundService.RunAsync(s => s.LongRunningTask(sampleCount));
     }
 }
